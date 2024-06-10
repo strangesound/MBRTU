@@ -21,30 +21,39 @@ const SERIAL_PORT = "/dev/tty.usbserial-10"; // Замените на ваш п�
 const MODBUS_ADDRESS = 16; // Адрес устройства Modbus
 const REGISTER_ADDRESS = 0x0002; // Адрес первого регистра для чтения счётчика импульсов
 const POLLING_INTERVAL = 200; // Интервал опроса в миллисекундах
+const RECONNECT_INTERVAL = 5000; // Интервал попытки переподключения в миллисекундах
 
 let previousValue = null; // Переменная для хранения предыдущего значения
+let pollingIntervalId = null; // Идентификатор интервала опроса
 
-// Открываем соединение по серийному порту с заданной скоростью
-client.connectRTU(SERIAL_PORT, { baudRate: 9600 }, function (err) {
-    if (err) {
-        console.error("Error connecting to serial port:", err);
-        return;
-    }
-    console.log("Connected to serial port");
+// Функция для установки соединения
+function connect() {
+    client.connectRTU(SERIAL_PORT, { baudRate: 9600 }, function (err) {
+        if (err) {
+            console.error("Error connecting to serial port:", err);
+            setTimeout(connect, RECONNECT_INTERVAL); // Попытка переподключения
+            return;
+        }
+        console.log("Connected to serial port");
 
-    // Устанавливаем адрес устройства
-    client.setID(MODBUS_ADDRESS);
-    var date_time = new Date();
+        // Устанавливаем адрес устройства
+        client.setID(MODBUS_ADDRESS);
+        startPolling(); // Запускаем опрос при успешном подключении
+    });
+}
 
-    // Запускаем периодический опрос
-    setInterval(() => {
-        // Читаем 4 16-битных Input Registers (2 регистра по 16 бит для одного значения)
+// Функция для запуска периодического опроса
+function startPolling() {
+    pollingIntervalId = setInterval(() => {
         client.readInputRegisters(REGISTER_ADDRESS, 2, function (err, data) {
             if (err) {
                 console.error("Error reading register:", err);
+                clearInterval(pollingIntervalId); // Останавливаем опрос при ошибке
+                client.close(() => {
+                    setTimeout(connect, RECONNECT_INTERVAL); // Попытка переподключения
+                });
                 return;
             }
-
 
             // Преобразуем регистры 2 и 3 в 32-битное значение
             const high = data.data[0];
@@ -64,7 +73,10 @@ client.connectRTU(SERIAL_PORT, { baudRate: 9600 }, function (err) {
             }
         });
     }, POLLING_INTERVAL);
-});
+}
+
+// Запуск соединения
+connect();
 
 // Запуск сервера
 const PORT = 3000;
