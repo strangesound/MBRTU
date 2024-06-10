@@ -45,6 +45,7 @@ client.connectRTU(SERIAL_PORT, { baudRate: 9600 }, function (err) {
                 return;
             }
 
+
             // Преобразуем регистры 2 и 3 в 32-битное значение
             const high = data.data[0];
             const low = data.data[1];
